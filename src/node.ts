@@ -30,6 +30,7 @@ export class Node extends EventEmitter {
   buf: Buffer;
 
   mode: number; // S_IFDIR, S_IFREG, etc..
+  rdev: number = 0;
 
   // Number of hard links pointing at this Node.
   private _nlink = 1;
