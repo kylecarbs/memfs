@@ -1543,8 +1543,6 @@ export class Volume implements FsCallbackApi, FsSynchronousApi {
   private accessBase(filename: string, mode: number) {
     const link = this.getLinkOrThrow(filename, 'access');
 
-    console.log("checking access")
-
     // Skip access check if mode is F_OK (0)
     if (mode === F_OK) return;
 
