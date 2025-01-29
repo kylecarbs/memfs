@@ -1470,10 +1470,6 @@ export class Volume implements FsCallbackApi, FsSynchronousApi {
       throw err;
     }
 
-    if (newPathDirLink.children.size > 0) {
-      throw createError(ENOTEMPTY, 'rename', oldPathFilename, newPathFilename);
-    }
-
     // TODO: Also treat cases with directories and symbolic links.
     // TODO: See: http://man7.org/linux/man-pages/man2/rename.2.html
 
@@ -1492,10 +1488,15 @@ export class Volume implements FsCallbackApi, FsSynchronousApi {
       throw createError(EACCES, 'rename', oldPathFilename, newPathFilename);
     }
 
-    oldLinkParent.deleteChild(link);
-
     // Rename should overwrite the new path, if that exists.
     const name = pathModule.basename(newPathFilename);
+
+    const linkToOverwrite = newPathDirLink.getChild(name)
+    if (linkToOverwrite && linkToOverwrite.children.size > 0) {
+      throw createError(ENOTEMPTY, 'rename', oldPathFilename, newPathFilename);
+    }
+
+    oldLinkParent.deleteChild(link);
     link.name = name;
     link.steps = [...newPathDirLink.steps, name];
     newPathDirLink.setChild(link.getName(), link);
