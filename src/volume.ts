@@ -358,13 +358,14 @@ export class Volume implements FsCallbackApi, FsSynchronousApi {
       throw new Error('createLink: name cannot be empty');
     }
 
-    // If no explicit permission is provided, use defaults based on type
-    const finalPerm = mode ?? (isDirectory ? 0o777 : 0o666);
-    // To prevent making a breaking change, `mode` can also just be a permission number
-    // and the file type is set based on `isDirectory`
-    const hasFileType = mode && mode & constants.S_IFMT;
-    const modeType = hasFileType ? mode & constants.S_IFMT : isDirectory ? constants.S_IFDIR : constants.S_IFREG;
-    const finalMode = (finalPerm & ~constants.S_IFMT) | modeType;
+    // Determine the file type (directory or regular file)
+    const modeType = isDirectory ? constants.S_IFDIR : constants.S_IFREG;
+    // Use provided mode or default permissions (masking to ensure valid permissions)
+    const defaultPermissions = isDirectory ? 0o777 : 0o666;
+    const providedMode = mode ?? defaultPermissions;
+    const fileType = (providedMode & constants.S_IFMT) || modeType;
+    const permissions = (providedMode & 0o777);
+    const finalMode = fileType | permissions;
     return parent.createChild(name, this.createNode(finalMode));
   }
 
@@ -503,8 +504,8 @@ export class Volume implements FsCallbackApi, FsSynchronousApi {
   }
 
   // Just like `getLink`, but also dereference/resolves symbolic links.
-  getResolvedLink(filenameOrSteps: string | string[]): Link | null {
-    return this.walk(filenameOrSteps, true, false, false);
+  getResolvedLink(filenameOrSteps: string | string[], funcName?: string): Link | null {
+    return this.walk(filenameOrSteps, true, false, false, funcName);
   }
 
   // Just like `getLinkOrThrow`, but also dereference/resolves symbolic links.
@@ -725,7 +726,7 @@ export class Volume implements FsCallbackApi, FsSynchronousApi {
         throw createError(EACCES, 'open', link.getPath());
       }
     }
-    if (!(flagsNum & O_RDONLY)) {
+    if (!(flagsNum & O_RDONLY) && flagsNum !== O_RDONLY) {
       if (!node.canWrite()) {
         throw createError(EACCES, 'open', link.getPath());
       }
@@ -1194,7 +1195,14 @@ export class Volume implements FsCallbackApi, FsSynchronousApi {
   }
 
   private copyFileBase(src: string, dest: string, flags: number) {
-    const buf = this.readFileSync(src) as Buffer;
+    let link: Link;
+    try {
+      link = this.getLinkOrThrow(src)
+    } catch (err) {
+      if (err.code === ENOENT) {
+        throw createError(ENOENT, 'copyFile', src, dest);
+      } else throw err;
+    }
 
     if (flags & COPYFILE_EXCL) {
       if (this.existsSync(dest)) {
@@ -1206,7 +1214,9 @@ export class Volume implements FsCallbackApi, FsSynchronousApi {
       throw createError(ENOSYS, 'copyFile', src, dest);
     }
 
-    this.writeFileBase(dest, buf, FLAGS.w, MODE.DEFAULT);
+    this.writeFileBase(dest, link.node.getBuffer(), FLAGS.w, link.node.mode);
+    const destLink = this.getLinkOrThrow(dest)
+    destLink.node.mode = link.node.mode
   }
 
   copyFileSync(src: PathLike, dest: PathLike, flags?: TFlagsCopy) {
@@ -1460,6 +1470,10 @@ export class Volume implements FsCallbackApi, FsSynchronousApi {
       throw err;
     }
 
+    if (newPathDirLink.children.size > 0) {
+      throw createError(ENOTEMPTY, 'rename', oldPathFilename, newPathFilename);
+    }
+
     // TODO: Also treat cases with directories and symbolic links.
     // TODO: See: http://man7.org/linux/man-pages/man2/rename.2.html
 
@@ -1527,6 +1541,34 @@ export class Volume implements FsCallbackApi, FsSynchronousApi {
 
   private accessBase(filename: string, mode: number) {
     const link = this.getLinkOrThrow(filename, 'access');
+
+    console.log("checking access")
+
+    // Skip access check if mode is F_OK (0)
+    if (mode === F_OK) return;
+
+    const fileMode = link.getNode().mode;
+
+    // Check write access (W_OK)
+    if (mode & constants.W_OK) {
+      if (!(fileMode & constants.S_IWUSR)) {
+        throw createError(EACCES, 'access', filename);
+      }
+    }
+
+    // Check read access (R_OK) 
+    if (mode & constants.R_OK) {
+      if (!(fileMode & constants.S_IRUSR)) {
+        throw createError(EACCES, 'access', filename);
+      }
+    }
+
+    // Check execute access (X_OK)
+    if (mode & constants.X_OK) {
+      if (!(fileMode & constants.S_IXUSR)) {
+        throw createError(EACCES, 'access', filename);
+      }
+    }
   }
 
   accessSync(path: PathLike, mode: number = F_OK) {
@@ -1807,7 +1849,7 @@ export class Volume implements FsCallbackApi, FsSynchronousApi {
   /**
    * Creates directory tree recursively.
    */
-  private mkdirpBase(filename: string, modeNum: number) {
+  private mkdirpBase(filename: string, modeNum: number, funcName: string = 'mkdirp') {
     let created = false;
     const steps = filenameToSteps(filename);
 
@@ -1815,7 +1857,7 @@ export class Volume implements FsCallbackApi, FsSynchronousApi {
     let i = steps.length;
     // Find the longest subpath of filename that still exists:
     for (i = steps.length; i >= 0; i--) {
-      curr = this.getResolvedLink(steps.slice(0, i));
+      curr = this.getResolvedLink(steps.slice(0, i), funcName);
       if (curr) break;
     }
     if (!curr) {
@@ -1827,6 +1869,11 @@ export class Volume implements FsCallbackApi, FsSynchronousApi {
     // Check access the lazy way:
     curr = this.getResolvedLinkOrThrow(sep + steps.slice(0, i).join(sep), 'mkdir');
 
+    if (i === steps.length && curr.getNode().isFile()) {
+      throw createError(EEXIST, 'mkdir', filename);
+    }
+
+    let firstCreated: string | undefined;
     // Start creating directories:
     for (i; i < steps.length; i++) {
       const node = curr.getNode();
@@ -1839,9 +1886,10 @@ export class Volume implements FsCallbackApi, FsSynchronousApi {
       }
 
       created = true;
+      if (!firstCreated) firstCreated = sep + steps.slice(0, i + 1).join(sep);
       curr = curr.createChild(steps[i], this.createNode(constants.S_IFDIR | modeNum));
     }
-    return created ? filename : undefined;
+    return created ? firstCreated : undefined;
   }
 
   mkdirSync(path: PathLike, options: opts.IMkdirOptions & { recursive: true }): string | undefined;
@@ -1851,7 +1899,7 @@ export class Volume implements FsCallbackApi, FsSynchronousApi {
     const opts = getMkdirOptions(options);
     const modeNum = modeToNumber(opts.mode, 0o777);
     const filename = pathToFilename(path);
-    if (opts.recursive) return this.mkdirpBase(filename, modeNum);
+    if (opts.recursive) return this.mkdirpBase(filename, modeNum, 'mkdir');
     this.mkdirBase(filename, modeNum);
   }
 
@@ -1877,6 +1925,8 @@ export class Volume implements FsCallbackApi, FsSynchronousApi {
       if (err.code === EEXIST) {
         if (retry > 1) return this.mkdtempBase(prefix, encoding, retry - 1);
         else throw Error('Could not create temp dir.');
+      } else if (err.code === ENOENT) {
+        throw createError(ENOENT, 'mkdtemp', prefix);
       } else throw err;
     }
   }
