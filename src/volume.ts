@@ -154,10 +154,6 @@ export function filenameToSteps(filename: string, base?: string): string[] {
   return fullPathSansSlash.split(sep);
 }
 
-export function pathToSteps(path: PathLike): string[] {
-  return filenameToSteps(pathToFilename(path));
-}
-
 export function dataToStr(data: TData, encoding: string = ENCODING_UTF8): string {
   if (Buffer.isBuffer(data)) return data.toString(encoding);
   else if (data instanceof Uint8Array) return bufferFrom(data).toString(encoding);
@@ -447,7 +443,7 @@ export class Volume implements FsCallbackApi, FsSynchronousApi {
       steps = stepsOrFilenameOrLink.steps;
       filename = sep + steps.join(sep);
     } else if (typeof stepsOrFilenameOrLink === 'string') {
-      steps = filenameToSteps(stepsOrFilenameOrLink);
+      steps = this.filenameToSteps(stepsOrFilenameOrLink);
       filename = stepsOrFilenameOrLink;
     } else {
       steps = stepsOrFilenameOrLink;
@@ -481,7 +477,7 @@ export class Volume implements FsCallbackApi, FsSynchronousApi {
           ? node.symlink
           : join(pathModule.dirname(curr.getPath()), node.symlink); // Relative to symlink's parent
 
-        steps = filenameToSteps(resolvedPath).concat(steps.slice(i + 1));
+        steps = this.filenameToSteps(resolvedPath).concat(steps.slice(i + 1));
         curr = this.root;
         i = 0;
         continue;
@@ -531,7 +527,7 @@ export class Volume implements FsCallbackApi, FsSynchronousApi {
 
   private getLinkParentAsDirOrThrow(filenameOrSteps: string | string[], funcName?: string): Link {
     const steps: string[] = (
-      filenameOrSteps instanceof Array ? filenameOrSteps : filenameToSteps(filenameOrSteps)
+      filenameOrSteps instanceof Array ? filenameOrSteps : this.filenameToSteps(filenameOrSteps)
     ).slice(0, -1);
     const filename: string = sep + steps.join(sep);
     const link = this.getLinkOrThrow(filename, funcName);
@@ -747,7 +743,7 @@ export class Volume implements FsCallbackApi, FsSynchronousApi {
     modeNum: number | undefined,
     resolveSymlinks: boolean = true,
   ): File {
-    const steps = filenameToSteps(filename);
+    const steps = this.filenameToSteps(filename);
     let link: Link | null;
     try {
       link = resolveSymlinks ? this.getResolvedLinkOrThrow(filename, 'open') : this.getLinkOrThrow(filename, 'open');
@@ -1289,7 +1285,7 @@ export class Volume implements FsCallbackApi, FsSynchronousApi {
   }
 
   private symlinkBase(targetFilename: string, pathFilename: string): Link {
-    const pathSteps = filenameToSteps(pathFilename);
+    const pathSteps = this.filenameToSteps(pathFilename);
 
     // Check if directory exists, where we about to create a symlink.
     let dirLink;
@@ -1615,7 +1611,7 @@ export class Volume implements FsCallbackApi, FsSynchronousApi {
   }
 
   private readdirBase(filename: string, options: opts.IReaddirOptions): TDataOut[] | Dirent[] {
-    const steps = filenameToSteps(filename);
+    const steps = this.filenameToSteps(filename);
     const link: Link = this.getResolvedLinkOrThrow(filename, 'scandir');
 
     const node = link.getNode();
@@ -1826,7 +1822,7 @@ export class Volume implements FsCallbackApi, FsSynchronousApi {
   }
 
   private mkdirBase(filename: string, modeNum: number) {
-    const steps = filenameToSteps(filename);
+    const steps = this.filenameToSteps(filename);
 
     // This will throw if user tries to create root dir `fs.mkdirSync('/')`.
     if (!steps.length) {
@@ -1850,7 +1846,7 @@ export class Volume implements FsCallbackApi, FsSynchronousApi {
    */
   private mkdirpBase(filename: string, modeNum: number, funcName: string = 'mkdirp') {
     let created = false;
-    const steps = filenameToSteps(filename);
+    const steps = this.filenameToSteps(filename);
 
     let curr: Link | null = null;
     let i = steps.length;
@@ -2233,6 +2229,10 @@ export class Volume implements FsCallbackApi, FsSynchronousApi {
     const [options, callback] = getOpendirOptsAndCb(a, b);
     const filename = pathToFilename(path);
     this.wrapAsync(this.opendirBase, [filename, options], callback);
+  }
+
+  private filenameToSteps(filename: string, base?: string): string[] {
+    return filenameToSteps(filename, base);
   }
 }
 
