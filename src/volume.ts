@@ -2266,7 +2266,10 @@ export class StatWatcher extends EventEmitter {
 
   private onInterval = () => {
     try {
-      const stats = this.vol.statSync(this.filename);
+      let stats = this.vol.statSync(this.filename, { throwIfNoEntry: false });
+      if (!stats) {
+        stats = new Stats();
+      }
       if (this.hasChanged(stats)) {
         this.emit('change', stats, this.prev);
         this.prev = stats;

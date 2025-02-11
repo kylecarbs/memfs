@@ -1,6 +1,9 @@
 {
-  "name": "memfs",
-  "version": "4.17.0",
+  "name": "@kylecarbs/memfs",
+  "version": "4.17.0-4",
+  "publishConfig": {
+    "access": "public"
+  },
   "description": "In-memory file-system with Node's fs API.",
   "keywords": [
     "fs",
