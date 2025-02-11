@@ -2285,7 +2285,11 @@ export class StatWatcher extends EventEmitter {
       ? setTimeout.bind(typeof globalThis !== 'undefined' ? globalThis : global)
       : setTimeoutUnref;
     this.interval = interval;
-    this.prev = this.vol.statSync(this.filename);
+    let stats = this.vol.statSync(this.filename, { throwIfNoEntry: false });
+    if (!stats) {
+      stats = new Stats();
+    }
+    this.prev = stats;
     this.loop();
   }
 
