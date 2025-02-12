@@ -359,8 +359,8 @@ export class Volume implements FsCallbackApi, FsSynchronousApi {
     // Use provided mode or default permissions (masking to ensure valid permissions)
     const defaultPermissions = isDirectory ? 0o777 : 0o666;
     const providedMode = mode ?? defaultPermissions;
-    const fileType = (providedMode & constants.S_IFMT) || modeType;
-    const permissions = (providedMode & 0o777);
+    const fileType = providedMode & constants.S_IFMT || modeType;
+    const permissions = providedMode & 0o777;
     const finalMode = fileType | permissions;
     return parent.createChild(name, this.createNode(finalMode));
   }
@@ -1193,7 +1193,7 @@ export class Volume implements FsCallbackApi, FsSynchronousApi {
   private copyFileBase(src: string, dest: string, flags: number) {
     let link: Link;
     try {
-      link = this.getLinkOrThrow(src)
+      link = this.getLinkOrThrow(src);
     } catch (err) {
       if (err.code === ENOENT) {
         throw createError(ENOENT, 'copyFile', src, dest);
@@ -1211,8 +1211,8 @@ export class Volume implements FsCallbackApi, FsSynchronousApi {
     }
 
     this.writeFileBase(dest, link.node.getBuffer(), FLAGS.w, link.node.mode);
-    const destLink = this.getLinkOrThrow(dest)
-    destLink.node.mode = link.node.mode
+    const destLink = this.getLinkOrThrow(dest);
+    destLink.node.mode = link.node.mode;
   }
 
   copyFileSync(src: PathLike, dest: PathLike, flags?: TFlagsCopy) {
@@ -1487,7 +1487,7 @@ export class Volume implements FsCallbackApi, FsSynchronousApi {
     // Rename should overwrite the new path, if that exists.
     const name = pathModule.basename(newPathFilename);
 
-    const linkToOverwrite = newPathDirLink.getChild(name)
+    const linkToOverwrite = newPathDirLink.getChild(name);
     if (linkToOverwrite && linkToOverwrite.children.size > 0) {
       throw createError(ENOTEMPTY, 'rename', oldPathFilename, newPathFilename);
     }
@@ -1551,7 +1551,7 @@ export class Volume implements FsCallbackApi, FsSynchronousApi {
       }
     }
 
-    // Check read access (R_OK) 
+    // Check read access (R_OK)
     if (mode & constants.R_OK) {
       if (!(fileMode & constants.S_IRUSR)) {
         throw createError(EACCES, 'access', filename);
@@ -2747,8 +2747,10 @@ export class FSWatcher extends EventEmitter {
         setTimeout(() => {
           // 1. watch changes of the new link-node
           watchLinkNodeChanged(l);
-          // 2. watch changes of the new link-node's children
-          watchLinkChildrenChanged(l);
+          if (recursive) {
+            // 2. watch changes of the new link-node's children
+            watchLinkChildrenChanged(l);
+          }
         });
       };
 
