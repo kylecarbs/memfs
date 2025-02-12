@@ -2268,7 +2268,7 @@ export class StatWatcher extends EventEmitter {
     try {
       let stats = this.vol.statSync(this.filename, { throwIfNoEntry: false });
       if (!stats) {
-        stats = new Stats();
+        stats = Stats.empty(false);
       }
       if (this.hasChanged(stats)) {
         this.emit('change', stats, this.prev);
@@ -2285,11 +2285,16 @@ export class StatWatcher extends EventEmitter {
       ? setTimeout.bind(typeof globalThis !== 'undefined' ? globalThis : global)
       : setTimeoutUnref;
     this.interval = interval;
-    let stats = this.vol.statSync(this.filename, { throwIfNoEntry: false });
-    if (!stats) {
-      stats = new Stats();
+    let prev = this.vol.statSync(this.filename, { throwIfNoEntry: false });
+    if (!prev) {
+      prev = Stats.empty(false);
+      queueMicrotask(() => {
+        // If the file doesn't exist, we need to emit a change event.
+        // This is how NodeJS works.
+        this.emit('change', prev, prev);
+      });
     }
-    this.prev = stats;
+    this.prev = prev;
     this.loop();
   }
 
@@ -2699,7 +2704,7 @@ export class FSWatcher extends EventEmitter {
   ) {
     this._filename = pathToFilename(path);
     this._steps = filenameToSteps(this._filename);
-    this._filenameEncoded = strToEncoding(this._filename);
+    this._filenameEncoded = strToEncoding(this._filename, encoding);
     // this._persistent = persistent;
     this._recursive = recursive;
     this._encoding = encoding;
@@ -2723,7 +2728,7 @@ export class FSWatcher extends EventEmitter {
           filename = this._getName();
         }
 
-        return this.emit('change', 'change', filename);
+        return this.emit('change', 'change', strToEncoding(filename, this._encoding));
       };
       node.on('change', onNodeChange);
 
@@ -2737,7 +2742,7 @@ export class FSWatcher extends EventEmitter {
 
       // when a new link added
       const onLinkChildAdd = (l: Link) => {
-        this.emit('change', 'rename', relative(this._filename, l.getPath()));
+        this.emit('change', 'rename', strToEncoding(relative(this._filename, l.getPath()), this._encoding));
 
         setTimeout(() => {
           // 1. watch changes of the new link-node
@@ -2765,7 +2770,7 @@ export class FSWatcher extends EventEmitter {
         };
         removeLinkNodeListeners(l);
 
-        this.emit('change', 'rename', relative(this._filename, l.getPath()));
+        this.emit('change', 'rename', strToEncoding(relative(this._filename, l.getPath()), this._encoding));
       };
 
       // children nodes changed

@@ -9,6 +9,33 @@ export type TStatNumber = number | bigint;
  * Statistics about a file/directory, like `fs.Stats`.
  */
 export class Stats<T = TStatNumber> {
+  static empty(bigint: false): Stats<number>;
+  static empty(bigint: true): Stats<bigint>;
+  static empty(bigint?: boolean): Stats<TStatNumber> {
+    const stats = new Stats<TStatNumber>();
+    const getStatNumber = !bigint ? number => number : number => BigInt(number);
+    const emptyDate = new Date(Date.UTC(1970, 0, 1, 0, 0, 0));
+    stats.uid = getStatNumber(0);
+    stats.gid = getStatNumber(0);
+    stats.dev = getStatNumber(0);
+    stats.mode = getStatNumber(0);
+    stats.nlink = getStatNumber(0);
+    stats.rdev = getStatNumber(0);
+    stats.blksize = getStatNumber(0);
+    stats.ino = getStatNumber(0);
+    stats.size = getStatNumber(0);
+    stats.blocks = getStatNumber(0);
+    stats.atime = emptyDate;
+    stats.mtime = emptyDate;
+    stats.ctime = emptyDate;
+    stats.birthtime = emptyDate;
+    stats.atimeMs = getStatNumber(0);
+    stats.mtimeMs = getStatNumber(0);
+    stats.ctimeMs = getStatNumber(0);
+    stats.birthtimeMs = getStatNumber(0);
+    return stats;
+  }
+
   static build(node: Node, bigint: false): Stats<number>;
   static build(node: Node, bigint: true): Stats<bigint>;
   static build(node: Node, bigint?: boolean): Stats<TStatNumber>;
