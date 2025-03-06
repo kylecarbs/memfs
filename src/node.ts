@@ -156,6 +156,7 @@ export class Node extends EventEmitter {
   makeSymlink(symlink: string) {
     this.mode = S_IFLNK | 0o666;
     this.symlink = symlink;
+    this.touch();
   }
 
   write(buf: Buffer, off: number = 0, len: number = buf.length, pos: number = 0): number {
@@ -365,22 +366,18 @@ export class Link extends EventEmitter {
     return this.node;
   }
 
-  createChild(name: string, node: Node = this.vol.createNode(S_IFREG | 0o666)): Link {
-    const link = new Link(this.vol, this, name);
-    link.setNode(node);
-
-    if (node.isDirectory()) {
-      link.children.set('.', link);
-      link.getNode().nlink++;
-    }
-
+  createChild(name: string, mode: number = S_IFREG | 0o666): Link {
+    const link = new this.vol.props.Link(this.vol, this, name);
     this.setChild(name, link);
-
+    link.node.mode = mode;
     return link;
   }
 
-  setChild(name: string, link: Link = new Link(this.vol, this, name)): Link {
+  setChild(name: string, link: Link = new this.vol.props.Link(this.vol, this, name)): Link {
     this.children.set(name, link);
+    if (!link.node) {
+      link.setNode(this.vol.createNode(S_IFREG | 0o666));
+    }
     link.parent = this;
     this.length++;
 

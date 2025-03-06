@@ -362,7 +362,7 @@ export class Volume implements FsCallbackApi, FsSynchronousApi {
     const fileType = providedMode & constants.S_IFMT || modeType;
     const permissions = providedMode & 0o777;
     const finalMode = fileType | permissions;
-    return parent.createChild(name, this.createNode(finalMode));
+    return parent.createChild(name, finalMode);
   }
 
   deleteLink(link: Link): boolean {
@@ -1187,7 +1187,7 @@ export class Volume implements FsCallbackApi, FsSynchronousApi {
 
     const node = link1.getNode();
     node.nlink++;
-    dir2.createChild(name, node);
+    dir2.setChild(name, link1)
   }
 
   private copyFileBase(src: string, dest: string, flags: number) {
@@ -1492,10 +1492,14 @@ export class Volume implements FsCallbackApi, FsSynchronousApi {
       throw createError(ENOTEMPTY, 'rename', oldPathFilename, newPathFilename);
     }
 
+    const newLink = new this.props.Link(this, newPathDirLink, name);
+    newLink.node = link.node;
+    newLink.ino = link.ino;
+    newLink.steps = [...newPathDirLink.steps, name];
+    // We must move the child before delete otherwise the filesystem
+    // will clear the file because potentially 0 nlink.
+    newPathDirLink.setChild(name, newLink);
     oldLinkParent.deleteChild(link);
-    link.name = name;
-    link.steps = [...newPathDirLink.steps, name];
-    newPathDirLink.setChild(link.getName(), link);
   }
 
   renameSync(oldPath: PathLike, newPath: PathLike) {
@@ -1838,7 +1842,7 @@ export class Volume implements FsCallbackApi, FsSynchronousApi {
     const node = dir.getNode();
     if (!node.canWrite() || !node.canExecute()) throw createError(EACCES, 'mkdir', filename);
 
-    dir.createChild(name, this.createNode(constants.S_IFDIR | modeNum));
+    dir.createChild(name, constants.S_IFDIR | modeNum);
   }
 
   /**
@@ -1882,7 +1886,7 @@ export class Volume implements FsCallbackApi, FsSynchronousApi {
 
       created = true;
       if (!firstCreated) firstCreated = sep + steps.slice(0, i + 1).join(sep);
-      curr = curr.createChild(steps[i], this.createNode(constants.S_IFDIR | modeNum));
+      curr = curr.createChild(steps[i], constants.S_IFDIR | modeNum);
     }
     return created ? firstCreated : undefined;
   }
