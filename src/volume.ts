@@ -1492,10 +1492,13 @@ export class Volume implements FsCallbackApi, FsSynchronousApi {
       throw createError(ENOTEMPTY, 'rename', oldPathFilename, newPathFilename);
     }
 
+    const newLink = new this.props.Link(this, newPathDirLink, name);
+    newLink.node = link.node;
+    newLink.ino = link.ino;
+    // We must move the child before delete otherwise the filesystem
+    // will clear the file because potentially 0 nlink.
+    newPathDirLink.setChild(name, newLink);
     oldLinkParent.deleteChild(link);
-    link.name = name;
-    link.steps = [...newPathDirLink.steps, name];
-    newPathDirLink.setChild(link.getName(), link);
   }
 
   renameSync(oldPath: PathLike, newPath: PathLike) {
