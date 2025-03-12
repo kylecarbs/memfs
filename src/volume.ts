@@ -1210,6 +1210,10 @@ export class Volume implements FsCallbackApi, FsSynchronousApi {
       throw createError(ENOSYS, 'copyFile', src, dest);
     }
 
+    // Check node permissions
+    if (!(link.node.canRead())) {
+      throw createError(EACCES, 'open', link.getPath());
+    }
     this.writeFileBase(dest, link.node.getBuffer(), FLAGS.w, link.node.mode);
     const destLink = this.getLinkOrThrow(dest);
     destLink.node.mode = link.node.mode;
@@ -1493,10 +1497,16 @@ export class Volume implements FsCallbackApi, FsSynchronousApi {
     }
 
     const newLink = new this.props.Link(this, newPathDirLink, name);
+    newLink.children = link.children;
+    newLink.children.forEach(link => (link!.parent = newLink));
+    newLink.length = link.length;
     newLink.node = link.node;
     newLink.ino = link.ino;
-    // We must move the child before delete otherwise the filesystem
-    // will clear the file because potentially 0 nlink.
+    // Set steps last so all the children update their steps.
+    newLink.steps = [...newPathDirLink.steps, name];
+
+    // Idiomatically, the child must be moved before delete otherwise
+    // the filesystem should clear the file because potentially 0 nlink.
     newPathDirLink.setChild(name, newLink);
     oldLinkParent.deleteChild(link);
   }

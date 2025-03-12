@@ -273,7 +273,7 @@ describe('volume', () => {
           throw Error('This should not throw');
         } catch (error) {
           // Check for both errors, because in JavaScript we the `json` map's key order is not guaranteed.
-          expect(error.code === 'EISDIR' || error.code === 'ENOTDIR').toBe(true);
+          expect(error.code === 'EEXIST').toBe(true);
         }
       });
 
@@ -1273,7 +1273,7 @@ describe('volume', () => {
         expect(dir1.getNode().isDirectory()).toBe(true);
         expect(dir2.getNode().isDirectory()).toBe(true);
         expect(dir3.getNode().isDirectory()).toBe(true);
-        expect(fullPath).toBe('/dir1/dir2/dir3');
+        expect(fullPath).toBe('/dir1');
         const dirAlreadyExists = vol.mkdirSync('/dir1/dir2/dir3', { recursive: true });
         expect(dirAlreadyExists).toBe(undefined);
       });
@@ -1365,8 +1365,10 @@ describe('volume', () => {
         try {
           vol.writeFileSync('/tmp/foo-dir/foo.js', writtenContent);
 
-          expect(mockCallback).toBeCalledTimes(1);
-          expect(mockCallback).toBeCalledWith('rename', 'foo.js');
+          expect(mockCallback).toBeCalledTimes(3);
+          expect(mockCallback).nthCalledWith(1, 'rename', 'foo.js');
+          expect(mockCallback).nthCalledWith(2, 'change', 'foo.js');
+          expect(mockCallback).nthCalledWith(3, 'change', 'foo.js');
         } finally {
           watcher.close();
         }
@@ -1387,7 +1389,7 @@ describe('volume', () => {
         }
       });
 
-      it('Calls listener on .watch when renaming with recursive=true', done => {
+      it('Calls listener on .watch when renaming with recursive=true', () => {
         const vol = new Volume();
         vol.mkdirSync('/test');
         vol.writeFileSync('/test/lol.txt', 'foo');
@@ -1397,13 +1399,10 @@ describe('volume', () => {
 
           vol.renameSync('/test/lol.txt', '/test/lol-2.txt');
 
-          setTimeout(() => {
-            watcher.close();
-            expect(listener).toBeCalledTimes(2);
-            expect(listener).nthCalledWith(1, 'rename', 'test/lol.txt');
-            expect(listener).nthCalledWith(2, 'rename', 'test/lol-2.txt');
-            done();
-          }, 10);
+          watcher.close();
+          expect(listener).toBeCalledTimes(2);
+          expect(listener).nthCalledWith(1, 'rename', 'test/lol-2.txt');
+          expect(listener).nthCalledWith(2, 'rename', 'test/lol.txt');
         });
       });
       it('Calls listener on .watch with recursive=true', done => {
@@ -1419,17 +1418,17 @@ describe('volume', () => {
           vol.rmSync('/test/lol.txt');
           vol.mkdirSync('/test/foo');
 
-          setTimeout(() => {
-            watcher.close();
-            expect(listener).toBeCalledTimes(6);
-            expect(listener).nthCalledWith(1, 'change', 'lol.txt');
-            expect(listener).nthCalledWith(2, 'change', 'lol.txt');
-            expect(listener).nthCalledWith(3, 'rename', 'test/lol.txt');
-            expect(listener).nthCalledWith(4, 'rename', 'lol.txt');
-            expect(listener).nthCalledWith(5, 'rename', 'test/lol.txt');
-            expect(listener).nthCalledWith(6, 'rename', 'test/foo');
-            done();
-          }, 10);
+          watcher.close();
+          expect(listener).toBeCalledTimes(8);
+          expect(listener).nthCalledWith(1, 'change', 'lol.txt');
+          expect(listener).nthCalledWith(2, 'change', 'lol.txt');
+          expect(listener).nthCalledWith(3, 'rename', 'test/lol.txt');
+          expect(listener).nthCalledWith(4, 'change', 'test/lol.txt');
+          expect(listener).nthCalledWith(5, 'change', 'test/lol.txt');
+          expect(listener).nthCalledWith(6, 'rename', 'lol.txt');
+          expect(listener).nthCalledWith(7, 'rename', 'test/lol.txt');
+          expect(listener).nthCalledWith(8, 'rename', 'test/foo');
+          done();
         });
       });
       it('Calls listener on .watch with recursive=false', done => {

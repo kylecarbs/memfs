@@ -1,6 +1,6 @@
 {
   "name": "@kylecarbs/memfs",
-  "version": "4.17.0-10",
+  "version": "4.17.0-12",
   "publishConfig": {
     "access": "public"
   },
